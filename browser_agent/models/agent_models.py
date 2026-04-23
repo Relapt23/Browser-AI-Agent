@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from browser_agent.models.actions import AgentAction
+from browser_agent.models.actions_models import AgentAction
 
 
 class ActionResult(BaseModel):
