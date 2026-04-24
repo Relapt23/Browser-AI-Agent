@@ -26,8 +26,8 @@ _SENSITIVE_URL_PATTERNS = [
 
 
 class SensitiveDetector:
+    @staticmethod
     def check_action(
-        self,
         action: AgentAction,
         elements: list[InteractiveElement],
     ) -> SensitiveCheck:
@@ -38,7 +38,7 @@ class SensitiveDetector:
             )
 
         if isinstance(action, (Click, Type)):
-            element = self._find_element(action.selector, elements)
+            element = SensitiveDetector._find_element(action.selector, elements)
             if element and element.type == "password":
                 return SensitiveCheck(
                     is_sensitive=True,

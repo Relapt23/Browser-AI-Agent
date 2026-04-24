@@ -3,6 +3,7 @@ import re
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
+from browser_agent.browser.enums import TAG_TO_ROLE, ActionType
 from browser_agent.config import BrowserSettings
 
 from browser_agent.models import (
@@ -115,14 +116,13 @@ class BrowserManager:
     async def _extract_interactive_elements(self) -> list[InteractiveElement]:
         handles = await self.page.query_selector_all(INTERACTIVE_SELECTORS)
         result: list[InteractiveElement] = []
-        idx = 0
 
         for handle in handles:
             try:
                 if not await handle.is_visible():
                     continue
 
-                tag = (await handle.get_property("tagName")).lower()
+                tag = (await (await handle.get_property("tagName")).json_value()).lower()
                 role = await handle.get_attribute("role") or tag
                 name = (
                     await handle.get_attribute("aria-label")
@@ -145,118 +145,84 @@ class BrowserManager:
                     else None
                 )
 
-                href = await handle.get_attribute("href") if tag == "a" else None
-                placeholder = (
-                    await handle.get_attribute("placeholder")
-                    if tag in ("input", "textarea")
-                    else None
-                )
-
-                selector = await self._build_selector(handle)
-
                 result.append(
                     InteractiveElement(
-                        index=idx,
+                        index=len(result),
                         tag=tag,
                         role=role,
                         name=name,
                         type=el_type,
                         value=value,
-                        href=href,
-                        placeholder=placeholder,
-                        selector=selector,
+                        href=await handle.get_attribute("href") if tag == "a" else None,
+                        placeholder=(
+                            await handle.get_attribute("placeholder")
+                            if tag in ("input", "textarea")
+                            else None
+                        ),
                     )
                 )
-                idx += 1
             except Exception:
                 continue
 
         return result
 
-    async def _build_selector(self, handle) -> str:
-        test_id = await handle.get_attribute("data-testid")
-        if test_id:
-            return f'[data-testid="{test_id}"]'
-
-        el_id = await handle.get_attribute("id")
-        if el_id:
-            return f"#{el_id}"
-
-        return await handle.evaluate("""e => {
-            const parts = [];
-            while (e && e.nodeType === Node.ELEMENT_NODE) {
-                let selector = e.tagName.toLowerCase();
-                if (e.id) {
-                    parts.unshift('#' + e.id);
-                    break;
-                }
-                const parent = e.parentElement;
-                if (parent) {
-                    const siblings = Array.from(parent.children).filter(
-                        c => c.tagName === e.tagName
-                    );
-                    if (siblings.length > 1) {
-                        const idx = siblings.indexOf(e) + 1;
-                        selector += ':nth-of-type(' + idx + ')';
-                    }
-                }
-                parts.unshift(selector);
-                e = parent;
-            }
-            return parts.join(' > ');
-        }""")
-
-    async def _has_more_content(self) -> bool:
-        return await self.page.evaluate(
-            "() => document.documentElement.scrollHeight > window.innerHeight + window.scrollY + 100"
-        )
-
-    # ── Action execution ──
-
-    async def execute_action(self, action: AgentAction) -> ActionResult:
-        try:
-            if isinstance(action, Click):
-                return await self._do_click(action)
-            elif isinstance(action, Type):
-                return await self._do_type(action)
-            elif isinstance(action, Navigate):
-                return await self._do_navigate(action)
-            elif isinstance(action, Scroll):
-                return await self._do_scroll(action)
-            elif isinstance(action, Wait):
-                return await self._do_wait(action)
-            else:
-                return ActionResult(
-                    success=False,
-                    message=f"Unsupported action: {action.action}",
-                )
-        except Exception as e:
-            return ActionResult(success=False, message="Action failed", error=str(e))
-
-    def _resolve_selector(self, selector: str) -> str:
+    def _resolve_locator(self, selector: str):
         match = re.match(r"\[(\d+)]", selector)
-        if match:
-            idx = int(match.group(1))
-            if 0 <= idx < len(self._elements):
-                return self._elements[idx].selector
+        if not match:
+            return self.page.locator(selector)
+
+        idx = int(match.group(1))
+        if idx >= len(self._elements):
             raise IndexError(
                 f"Element index [{idx}] out of range (0-{len(self._elements) - 1})"
             )
-        return selector
+
+        element = self._elements[idx]
+
+        role = TAG_TO_ROLE.get(element.role) or TAG_TO_ROLE.get(element.tag)
+
+        if role and element.name:
+            return self.page.get_by_role(role.value, name=element.name, exact=False)
+        if element.name:
+            return self.page.get_by_text(element.name, exact=False)
+        if element.placeholder:
+            return self.page.get_by_placeholder(element.placeholder)
+
+        return self.page.locator(element.tag).nth(element.index)
+
+    async def _has_more_content(self) -> bool:
+        threshold = self._settings.SCROLL_THRESHOLD
+        return await self.page.evaluate(
+            f"() => document.documentElement.scrollHeight > window.innerHeight + window.scrollY + {threshold}"
+        )
+
+    async def execute_action(self, action: AgentAction) -> ActionResult:
+        try:
+            action_type = ActionType(action.action)
+            handler = getattr(self, action_type.handler)
+            return await handler(action)
+        except ValueError:
+            return ActionResult(
+                success=False,
+                message=f"Unsupported action: {action.action}",
+            )
+        except Exception as e:
+            return ActionResult(success=False, message="Action failed", error=str(e))
 
     async def _do_click(self, action: Click) -> ActionResult:
-        selector = self._resolve_selector(action.selector)
-        await self.page.click(selector, timeout=10000)
+        locator = self._resolve_locator(action.selector)
+        await locator.click(timeout=10000)
         await self._wait_for_stable()
         return ActionResult(success=True, message=f"Clicked: {action.description}")
 
     async def _do_type(self, action: Type) -> ActionResult:
-        selector = self._resolve_selector(action.selector)
+        locator = self._resolve_locator(action.selector)
         if action.clear_first:
-            await self.page.fill(selector, "", timeout=10000)
-        await self.page.fill(selector, action.text, timeout=10000)
+            await locator.fill(action.text, timeout=10000)
+        else:
+            await locator.press_sequentially(action.text, timeout=10000)
         if action.press_enter:
-            await self.page.press(selector, "Enter")
+            await locator.press("Enter")
             await self._wait_for_stable()
         return ActionResult(
             success=True, message=f"Typed '{action.text}': {action.description}"
@@ -271,7 +237,6 @@ class BrowserManager:
         if action.direction == "up":
             delta = -delta
         await self.page.evaluate(f"window.scrollBy(0, {delta})")
-        await asyncio.sleep(0.3)
         return ActionResult(success=True, message=f"Scrolled {action.direction}")
 
     async def _do_wait(self, action: Wait) -> ActionResult:
