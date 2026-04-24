@@ -12,7 +12,6 @@ class LLMSettings(BaseSettings):
     API_KEY: str
     MODEL: str
     BASE_URL: str
-    MAX_VISIBLE_TEXT: int
 
 
 class BrowserSettings(BaseSettings):

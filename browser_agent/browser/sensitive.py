@@ -26,16 +26,6 @@ _SENSITIVE_URL_PATTERNS = [
 
 
 class SensitiveDetector:
-    @staticmethod
-    def check_page(page_state: PageState) -> SensitiveCheck:
-        for pattern in _SENSITIVE_URL_PATTERNS:
-            if pattern.search(page_state.url):
-                return SensitiveCheck(
-                    is_sensitive=True,
-                    reason=f"Sensitive URL detected: {page_state.url}",
-                )
-        return SensitiveCheck(is_sensitive=False)
-
     def check_action(
         self,
         action: AgentAction,
@@ -76,3 +66,13 @@ class SensitiveDetector:
             if 0 <= idx < len(elements):
                 return elements[idx]
         return None
+
+    @staticmethod
+    def check_page(page_state: PageState) -> SensitiveCheck:
+        for pattern in _SENSITIVE_URL_PATTERNS:
+            if pattern.search(page_state.url):
+                return SensitiveCheck(
+                    is_sensitive=True,
+                    reason=f"Sensitive URL detected: {page_state.url}",
+                )
+        return SensitiveCheck(is_sensitive=False)

@@ -3,7 +3,7 @@ import re
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
-from browser_agent.config import BrowserSettings, llm_settings
+from browser_agent.config import BrowserSettings
 
 from browser_agent.models import (
     ActionResult,
@@ -22,7 +22,7 @@ INTERACTIVE_SELECTORS = (
     "[role='button'], [role='link'], [role='tab'], [role='menuitem']"
 )
 
-_CONTENT_SELECTORS = ["main", "article", "[role='main']", "#content", ".content"]
+CONTENT_SELECTORS = ["main", "article", "[role='main']", "#content", ".content", "body"]
 
 
 class BrowserManager:
@@ -99,26 +99,17 @@ class BrowserManager:
 
     async def _extract_visible_text(self) -> str:
         text = ""
-        for selector in _CONTENT_SELECTORS:
+        for selector in CONTENT_SELECTORS:
             try:
                 element = await self.page.query_selector(selector)
                 if element and await element.is_visible():
-                    text = await element.inner_text()
-                    if text.strip():
+                    text = (await element.inner_text()).strip()
+                    if text:
                         break
             except Exception:
                 continue
 
-        if not text.strip():
-            try:
-                text = await self.page.inner_text("body", timeout=5000)
-            except Exception:
-                text = ""
-
         text = re.sub(r"\n{3,}", "\n\n", text).strip()
-        if len(text) > llm_settings.MAX_VISIBLE_TEXT:
-            half = llm_settings.MAX_VISIBLE_TEXT // 2
-            text = text[:half] + "\n\n[... truncated ...]\n\n" + text[-half:]
         return text
 
     async def _extract_interactive_elements(self) -> list[InteractiveElement]:
@@ -131,7 +122,7 @@ class BrowserManager:
                 if not await handle.is_visible():
                     continue
 
-                tag = await handle.evaluate("e => e.tagName.toLowerCase()")
+                tag = (await handle.get_property("tagName")).lower()
                 role = await handle.get_attribute("role") or tag
                 name = (
                     await handle.get_attribute("aria-label")
@@ -148,12 +139,11 @@ class BrowserManager:
                     else None
                 )
 
-                value = None
-                if tag in ("input", "textarea"):
-                    try:
-                        value = await handle.input_value(timeout=1000)
-                    except Exception:
-                        pass
+                value = (
+                    await handle.input_value(timeout=self._settings.PAGE_TIMEOUT)
+                    if tag in ("input", "textarea")
+                    else None
+                )
 
                 href = await handle.get_attribute("href") if tag == "a" else None
                 placeholder = (
