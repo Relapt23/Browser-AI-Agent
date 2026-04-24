@@ -27,6 +27,7 @@ class BrowserSettings(BaseSettings):
     VIEWPORT_WIDTH: int
     VIEWPORT_HEIGHT: int
     PAGE_TIMEOUT: int
+    SCROLL_THRESHOLD: int = 100
 
 
 llm_settings = LLMSettings()
