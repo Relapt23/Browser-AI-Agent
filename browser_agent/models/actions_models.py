@@ -7,6 +7,10 @@ class Click(BaseModel):
     action: Literal["click"] = "click"
     selector: str
     description: str = Field(description="What this click is intended to do")
+    is_sensitive: bool = Field(
+        default=False,
+        description="True if this action involves payment, personal data, order confirmation, CAPTCHA, 2FA, or data deletion",
+    )
 
 
 class Type(BaseModel):
@@ -16,12 +20,20 @@ class Type(BaseModel):
     clear_first: bool = Field(default=True, description="Clear existing text before typing")
     press_enter: bool = Field(default=False, description="Press Enter after typing")
     description: str = Field(description="What this typing is intended to do")
+    is_sensitive: bool = Field(
+        default=False,
+        description="True if this action involves payment, personal data, order confirmation, CAPTCHA, 2FA, or data deletion",
+    )
 
 
 class Navigate(BaseModel):
     action: Literal["navigate"] = "navigate"
     url: str = Field(description="URL to navigate to")
     description: str = Field(description="Why navigating to this URL")
+    is_sensitive: bool = Field(
+        default=False,
+        description="True if this action involves payment, personal data, order confirmation, CAPTCHA, 2FA, or data deletion",
+    )
 
 
 class Scroll(BaseModel):

@@ -10,7 +10,6 @@ class InteractiveElement(BaseModel):
     value: str | None = None
     href: str | None = None
     placeholder: str | None = None
-    selector: str
 
 
 class PageState(BaseModel):
