@@ -9,6 +9,10 @@ class ActionResult(BaseModel):
     error: str | None = None
 
 
+class LLMResponse(BaseModel):
+    action: AgentAction
+
+
 class StepRecord(BaseModel):
     step: int
     action: AgentAction
