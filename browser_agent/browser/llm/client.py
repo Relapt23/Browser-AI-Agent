@@ -17,6 +17,7 @@ class LLMClient:
             max_retries=3,
         )
         self._model = settings.MODEL
+        self._system_prompt = get_system_prompt()
 
     async def get_next_action(
         self,
@@ -26,7 +27,7 @@ class LLMClient:
         step: int,
     ) -> AgentAction:
         messages = [
-            {"role": "system", "content": get_system_prompt()},
+            {"role": "system", "content": self._system_prompt},
             {
                 "role": "user",
                 "content": self._build_user_message(task, page_state, history, step),
