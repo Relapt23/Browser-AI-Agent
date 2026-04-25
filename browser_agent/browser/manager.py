@@ -216,8 +216,12 @@ class BrowserManager:
             return ActionResult(success=False, message="Action failed", error=str(e))
 
     async def _do_click(self, action: Click) -> ActionResult:
-        locator = self._resolve_locator(action.selector)
-        await locator.click(timeout=self._settings.PAGE_TIMEOUT)
+        handle = self._resolve_locator(action.selector)
+        try:
+            await handle.click(timeout=self._settings.PAGE_TIMEOUT)
+        except Exception:
+            await handle.scroll_into_view_if_needed(timeout=3000)
+            await handle.click(force=True, timeout=self._settings.PAGE_TIMEOUT)
         await self._wait_for_stable()
         return ActionResult(success=True, message=f"Clicked: {action.description}")
 
