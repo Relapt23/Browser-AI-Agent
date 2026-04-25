@@ -24,6 +24,28 @@ _SENSITIVE_URL_PATTERNS = [
     ]
 ]
 
+_CAPTCHA_URL_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"google\.com/sorry",
+        r"captcha",
+        r"challenge",
+        r"recaptcha",
+        r"hcaptcha",
+    ]
+]
+
+_CAPTCHA_TEXT_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"captcha",
+        r"verify you.?re.? human",
+        r"not a robot",
+        r"подтвердите.+что вы не робот",
+        r"проверк[аиу].+безопасности",
+    ]
+]
+
 
 class SensitiveDetector:
     @staticmethod
@@ -76,3 +98,15 @@ class SensitiveDetector:
                     reason=f"Sensitive URL detected: {page_state.url}",
                 )
         return SensitiveCheck(is_sensitive=False)
+
+    @staticmethod
+    def check_captcha(page_state: PageState) -> bool:
+        for pattern in _CAPTCHA_URL_PATTERNS:
+            if pattern.search(page_state.url):
+                return True
+
+        for pattern in _CAPTCHA_TEXT_PATTERNS:
+            if pattern.search(page_state.visible_text):
+                return True
+
+        return False

@@ -1,7 +1,7 @@
 import asyncio
 import re
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+from playwright.async_api import Browser, BrowserContext, ElementHandle, Page, async_playwright
 
 from browser_agent.browser.enums import TAG_TO_ROLE, ActionType
 from browser_agent.config import BrowserSettings
@@ -34,6 +34,7 @@ class BrowserManager:
         self._context: BrowserContext | None = None
         self._page: Page | None = None
         self._elements: list[InteractiveElement] = []
+        self._handles: list[ElementHandle] = []
 
     async def __aenter__(self):
         await self.launch()
@@ -55,6 +56,12 @@ class BrowserManager:
             },
         )
         self._page = await self._context.new_page()
+        await self._context.add_init_script(
+            "document.addEventListener('click', e => {"
+            "  const a = e.target.closest('a');"
+            "  if (a) a.removeAttribute('target');"
+            "}, true);"
+        )
 
     async def close(self) -> None:
         if self._browser:
@@ -121,10 +128,11 @@ class BrowserManager:
         return text
 
     async def _extract_interactive_elements(self) -> list[InteractiveElement]:
-        handles = await self.page.query_selector_all(INTERACTIVE_SELECTORS)
+        all_handles = await self.page.query_selector_all(INTERACTIVE_SELECTORS)
         result: list[InteractiveElement] = []
+        visible_handles: list[ElementHandle] = []
 
-        for handle in handles:
+        for handle in all_handles:
             try:
                 if not await handle.is_visible():
                     continue
@@ -168,9 +176,11 @@ class BrowserManager:
                         ),
                     )
                 )
+                visible_handles.append(handle)
             except Exception:
                 continue
 
+        self._handles = visible_handles
         return result
 
     def _resolve_locator(self, selector: str):
@@ -179,23 +189,12 @@ class BrowserManager:
             return self.page.locator(selector)
 
         idx = int(match.group(1))
-        if idx >= len(self._elements):
+        if idx >= len(self._handles):
             raise IndexError(
-                f"Element index [{idx}] out of range (0-{len(self._elements) - 1})"
+                f"Element index [{idx}] out of range (0-{len(self._handles) - 1})"
             )
 
-        element = self._elements[idx]
-
-        role = TAG_TO_ROLE.get(element.role) or TAG_TO_ROLE.get(element.tag)
-
-        if role and element.name:
-            return self.page.get_by_role(role.value, name=element.name, exact=False)
-        if element.name:
-            return self.page.get_by_text(element.name, exact=False)
-        if element.placeholder:
-            return self.page.get_by_placeholder(element.placeholder)
-
-        return self.page.locator(element.tag).nth(element.index)
+        return self._handles[idx]
 
     async def _has_more_content(self) -> bool:
         threshold = self._settings.SCROLL_THRESHOLD
@@ -218,16 +217,16 @@ class BrowserManager:
 
     async def _do_click(self, action: Click) -> ActionResult:
         locator = self._resolve_locator(action.selector)
-        await locator.click(timeout=10000)
+        await locator.click(timeout=self._settings.PAGE_TIMEOUT)
         await self._wait_for_stable()
         return ActionResult(success=True, message=f"Clicked: {action.description}")
 
     async def _do_type(self, action: Type) -> ActionResult:
         locator = self._resolve_locator(action.selector)
         if action.clear_first:
-            await locator.fill(action.text, timeout=10000)
+            await locator.fill(action.text, timeout=self._settings.PAGE_TIMEOUT)
         else:
-            await locator.press_sequentially(action.text, timeout=10000)
+            await locator.press_sequentially(action.text, timeout=self._settings.PAGE_TIMEOUT)
         if action.press_enter:
             await locator.press("Enter")
             await self._wait_for_stable()
@@ -253,6 +252,7 @@ class BrowserManager:
     async def _wait_for_stable(self) -> None:
         try:
             await self.page.wait_for_load_state("domcontentloaded", timeout=5000)
+            await self.page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
             pass
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)

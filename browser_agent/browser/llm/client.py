@@ -1,4 +1,8 @@
+import json
+import re
+
 from openai import AsyncOpenAI
+from pydantic import TypeAdapter
 
 from browser_agent.browser.llm.prompts import (
     get_system_prompt,
@@ -6,7 +10,7 @@ from browser_agent.browser.llm.prompts import (
     format_page_state,
 )
 from browser_agent.config import LLMSettings
-from browser_agent.models import AgentAction, Done, LLMResponse, PageState, StepRecord
+from browser_agent.models import AgentAction, Done, PageState, StepRecord
 
 
 class LLMClient:
@@ -18,6 +22,8 @@ class LLMClient:
         )
         self._model = settings.MODEL
         self._system_prompt = get_system_prompt()
+        self._action_adapter = TypeAdapter(AgentAction)
+        self._supports_json_format = True
 
     async def get_next_action(
         self,
@@ -35,20 +41,38 @@ class LLMClient:
         ]
 
         try:
-            response = await self._client.beta.chat.completions.parse(
-                model=self._model,
-                messages=messages,
-                response_format=LLMResponse,
-                temperature=0.2,
-            )
+            kwargs = {
+                "model": self._model,
+                "messages": messages,
+                "temperature": 0.2,
+            }
+            if self._supports_json_format:
+                kwargs["response_format"] = {"type": "json_object"}
 
-            parsed = response.choices[0].message.parsed
-            if parsed is None:
-                return Done(summary="LLM вернул невалидный ответ", success=False)
+            response = await self._client.chat.completions.create(**kwargs)
+            raw = response.choices[0].message.content
+            data = json.loads(self._extract_json(raw))
 
-            return parsed.action
+            return self._action_adapter.validate_python(data)
         except Exception as e:
+            if "response_format" in str(e) or "json" in str(e).lower():
+                self._supports_json_format = False
+
+                return await self.get_next_action(task, page_state, history, step)
+
             return Done(summary=f"Не удалось получить ответ от LLM: {e}", success=False)
+
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+
+        match = re.search(r"\{.*}", text, re.DOTALL)
+        if match:
+            return match.group(0)
+
+        return text
 
     @staticmethod
     def _build_user_message(
