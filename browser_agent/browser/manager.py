@@ -35,6 +35,13 @@ class BrowserManager:
         self._page: Page | None = None
         self._elements: list[InteractiveElement] = []
 
+    async def __aenter__(self):
+        await self.launch()
+        return self
+
+    async def __aexit__(self, *args):
+        await self.close()
+
     async def launch(self) -> None:
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
