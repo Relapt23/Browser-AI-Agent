@@ -47,8 +47,8 @@ class LLMClient:
                 return Done(summary="LLM вернул невалидный ответ", success=False)
 
             return parsed.action
-        except Exception:
-            return Done(summary="Не удалось получить ответ от LLM", success=False)
+        except Exception as e:
+            return Done(summary=f"Не удалось получить ответ от LLM: {e}", success=False)
 
     @staticmethod
     def _build_user_message(
