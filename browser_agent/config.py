@@ -29,6 +29,7 @@ class BrowserSettings(BaseSettings):
     PAGE_TIMEOUT: int
     SCROLL_THRESHOLD: int
     MAX_STEPS: int
+    CDP_URL: str
 
 
 llm_settings = LLMSettings()

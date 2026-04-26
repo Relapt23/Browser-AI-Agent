@@ -45,17 +45,26 @@ class BrowserManager:
 
     async def launch(self) -> None:
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(
-            headless=self._settings.HEADLESS,
-            slow_mo=self._settings.SLOW_MO,
-        )
-        self._context = await self._browser.new_context(
-            viewport={
-                "width": self._settings.VIEWPORT_WIDTH,
-                "height": self._settings.VIEWPORT_HEIGHT,
-            },
-        )
-        self._page = await self._context.new_page()
+
+        if self._settings.CDP_URL:
+            self._browser = await self._playwright.chromium.connect_over_cdp(
+                self._settings.CDP_URL,
+            )
+            self._context = self._browser.contexts[0]
+            self._page = await self._context.new_page()
+        else:
+            self._browser = await self._playwright.chromium.launch(
+                headless=self._settings.HEADLESS,
+                slow_mo=self._settings.SLOW_MO,
+            )
+            self._context = await self._browser.new_context(
+                viewport={
+                    "width": self._settings.VIEWPORT_WIDTH,
+                    "height": self._settings.VIEWPORT_HEIGHT,
+                },
+            )
+            self._page = await self._context.new_page()
+
         await self._context.add_init_script(
             "document.addEventListener('click', e => {"
             "  const a = e.target.closest('a');"
@@ -64,8 +73,12 @@ class BrowserManager:
         )
 
     async def close(self) -> None:
-        if self._browser:
-            await self._browser.close()
+        if self._settings.CDP_URL:
+            if self._page:
+                await self._page.close()
+        else:
+            if self._browser:
+                await self._browser.close()
         if self._playwright:
             await self._playwright.stop()
 
@@ -220,8 +233,14 @@ class BrowserManager:
         try:
             await handle.click(timeout=self._settings.PAGE_TIMEOUT)
         except Exception:
-            await handle.scroll_into_view_if_needed(timeout=3000)
-            await handle.click(force=True, timeout=self._settings.PAGE_TIMEOUT)
+            try:
+                await handle.scroll_into_view_if_needed(timeout=3000)
+                await handle.click(force=True, timeout=self._settings.PAGE_TIMEOUT)
+            except Exception as e:
+                if "outside of the viewport" in str(e):
+                    await handle.evaluate("el => el.click()")
+                else:
+                    raise
         await self._wait_for_stable()
         return ActionResult(success=True, message=f"Clicked: {action.description}")
 
@@ -259,4 +278,4 @@ class BrowserManager:
             await self.page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
             pass
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.0)
