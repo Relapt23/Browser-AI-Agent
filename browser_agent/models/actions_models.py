@@ -3,43 +3,53 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Field
 
 
+class ExpectedCondition(BaseModel):
+    target_checked: bool | None = None
+    element_value: str | None = None
+    selected_count: int | None = None
+    container_id: str | None = None
+    url_contains: str | None = None
+    text_visible: str | None = None
+
+
+class RequiredState(BaseModel):
+    selected_count: int | None = None
+    container_id: str | None = None
+
+
 class Click(BaseModel):
     action: Literal["click"] = "click"
-    selector: str
+    element_id: str = Field(description="Element ID from snapshot, e.g. 'e42'")
+    snapshot_id: str = Field(description="Snapshot ID to validate freshness")
     description: str = Field(description="What this click is intended to do")
-    is_sensitive: bool = Field(
-        default=False,
-        description="True if this action involves payment, personal data, order confirmation, CAPTCHA, 2FA, or data deletion",
-    )
+    is_sensitive: bool = False
+    expected: ExpectedCondition | None = None
+    required_state: RequiredState | None = None
 
 
 class Type(BaseModel):
     action: Literal["type"] = "type"
-    selector: str
+    element_id: str = Field(description="Element ID from snapshot")
+    snapshot_id: str = Field(description="Snapshot ID to validate freshness")
     text: str = Field(description="Text to type into the element")
     clear_first: bool = Field(default=True, description="Clear existing text before typing")
     press_enter: bool = Field(default=False, description="Press Enter after typing")
     description: str = Field(description="What this typing is intended to do")
-    is_sensitive: bool = Field(
-        default=False,
-        description="True if this action involves payment, personal data, order confirmation, CAPTCHA, 2FA, or data deletion",
-    )
+    is_sensitive: bool = False
+    expected: ExpectedCondition | None = None
 
 
 class Navigate(BaseModel):
     action: Literal["navigate"] = "navigate"
     url: str = Field(description="URL to navigate to")
     description: str = Field(description="Why navigating to this URL")
-    is_sensitive: bool = Field(
-        default=False,
-        description="True if this action involves payment, personal data, order confirmation, CAPTCHA, 2FA, or data deletion",
-    )
+    is_sensitive: bool = False
 
 
 class Scroll(BaseModel):
     action: Literal["scroll"] = "scroll"
     direction: Literal["up", "down"] = "down"
-    amount: int = Field(default=3, description="Pixels to scroll (multiplied by 100)")
+    amount: int = Field(default=3, description="Scroll amount (multiplied by 100px)")
     description: str = Field(description="Why scrolling")
 
 
