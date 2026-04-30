@@ -6,10 +6,12 @@ from browser_agent.models import (
     ActionResult,
     AgentAction,
     AskUser,
+    Click,
     Done,
     SensitiveCheck,
     Snapshot,
     StepRecord,
+    Type,
 )
 
 
@@ -121,6 +123,6 @@ class Agent:
                 action=action,
                 result=result,
                 page_url=snapshot.state.url,
-                snapshot_id=getattr(action, "snapshot_id", None),
+                snapshot_id=action.snapshot_id if isinstance(action, (Click, Type)) else None,
             )
         )

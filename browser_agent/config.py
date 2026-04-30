@@ -27,7 +27,6 @@ class BrowserSettings(BaseSettings):
     VIEWPORT_WIDTH: int
     VIEWPORT_HEIGHT: int
     PAGE_TIMEOUT: int
-    SCROLL_THRESHOLD: int
     MAX_STEPS: int
     CDP_URL: str
 

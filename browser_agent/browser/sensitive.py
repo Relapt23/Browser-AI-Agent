@@ -69,11 +69,10 @@ class SensitiveDetector:
         action: AgentAction,
         snapshot: Snapshot,
     ) -> SensitiveCheck:
-        if getattr(action, "is_sensitive", False):
-            description = getattr(action, "description", action.action)
+        if isinstance(action, (Click, Type, Navigate)) and action.is_sensitive:
             return SensitiveCheck(
                 is_sensitive=True,
-                reason=f"LLM flagged as sensitive: {description}",
+                reason=f"LLM flagged as sensitive: {action.description}",
             )
 
         if isinstance(action, (Click, Type)):

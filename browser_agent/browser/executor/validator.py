@@ -130,8 +130,8 @@ class ActionValidator:
         actual["value"] = element.value
         checks.append(("element_value", element.value == expected.element_value))
 
-    @staticmethod
     def _validate_selected_count(
+        self,
         *,
         expected: ExpectedCondition,
         snapshot: Snapshot,
