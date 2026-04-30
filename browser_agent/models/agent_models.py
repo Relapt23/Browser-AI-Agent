@@ -7,10 +7,9 @@ class ActionResult(BaseModel):
     success: bool
     message: str
     error: str | None = None
-
-
-class LLMResponse(BaseModel):
-    action: AgentAction
+    observation: str | None = None
+    after_state: dict | None = None
+    verification_passed: bool | None = None
 
 
 class StepRecord(BaseModel):
@@ -18,3 +17,4 @@ class StepRecord(BaseModel):
     action: AgentAction
     result: ActionResult
     page_url: str | None = None
+    snapshot_id: str | None = None
