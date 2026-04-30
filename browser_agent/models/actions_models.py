@@ -3,6 +3,11 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Field
 
 
+class SelectionIntent(BaseModel):
+    mode: Literal["item", "range", "all"]
+    container_id: str | None = None
+
+
 class ExpectedCondition(BaseModel):
     target_checked: bool | None = None
     element_value: str | None = None
@@ -22,6 +27,7 @@ class Click(BaseModel):
     element_id: str = Field(description="Element ID from snapshot, e.g. 'e42'")
     snapshot_id: str = Field(description="Snapshot ID to validate freshness")
     description: str = Field(description="What this click is intended to do")
+    selection_intent: SelectionIntent | None = None
     is_sensitive: bool = False
     expected: ExpectedCondition | None = None
     required_state: RequiredState | None = None
@@ -32,7 +38,9 @@ class Type(BaseModel):
     element_id: str = Field(description="Element ID from snapshot")
     snapshot_id: str = Field(description="Snapshot ID to validate freshness")
     text: str = Field(description="Text to type into the element")
-    clear_first: bool = Field(default=True, description="Clear existing text before typing")
+    clear_first: bool = Field(
+        default=True, description="Clear existing text before typing"
+    )
     press_enter: bool = Field(default=False, description="Press Enter after typing")
     description: str = Field(description="What this typing is intended to do")
     is_sensitive: bool = False

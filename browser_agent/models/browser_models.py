@@ -1,14 +1,6 @@
 from pydantic import BaseModel, Field
 
 
-class PageState(BaseModel):
-    url: str
-    title: str
-    cleaned_html: str
-    has_more_content: bool = False
-    error: str | None = None
-
-
 class SensitiveCheck(BaseModel):
     is_sensitive: bool
     reason: str = ""
@@ -37,6 +29,8 @@ class ElementInfo(BaseModel):
     container_id: str | None = None
     container_role: str | None = None
     fingerprint: str | None = None
+    is_selection_control: bool = False
+    selection_scope: str | None = None
 
 
 class ContainerState(BaseModel):

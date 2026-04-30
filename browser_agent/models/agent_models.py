@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 
 from browser_agent.models.actions_models import AgentAction
-from browser_agent.models.browser_models import VerificationResult
 
 
 class ActionResult(BaseModel):
@@ -9,7 +8,6 @@ class ActionResult(BaseModel):
     message: str
     error: str | None = None
     observation: str | None = None
-    before_state: dict | None = None
     after_state: dict | None = None
     verification_passed: bool | None = None
 
