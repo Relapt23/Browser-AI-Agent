@@ -68,13 +68,20 @@ class SnapshotManager:
         self,
         element_id: str,
         snapshot_id: str,
+        *,
+        skip_visibility: bool = False,
     ) -> ElementHandle:
         self._check_current_snapshot_id(snapshot_id)
 
         handle = self._get_handle_or_raise(element_id)
         element_info = self._get_element_info_or_raise(element_id)
 
-        await self._live_validate(handle, element_id, element_info)
+        await self._live_validate(
+            handle,
+            element_id,
+            element_info,
+            skip_visibility=skip_visibility,
+        )
 
         return handle
 
@@ -83,12 +90,15 @@ class SnapshotManager:
         handle: ElementHandle,
         element_id: str,
         el_info: ElementInfo,
+        *,
+        skip_visibility: bool = False,
     ) -> None:
         live = await self._read_live_element_state(handle, element_id)
 
         self._validate_live_basics(
             element_id=element_id,
             live=live,
+            skip_visibility=skip_visibility,
         )
 
         self._validate_fingerprint(
@@ -347,22 +357,48 @@ class SnapshotManager:
         return f"Missing handles for elements: {shown}{suffix}"
 
     @staticmethod
+    def count_selected(snapshot: Snapshot, container_id: str | None) -> int | None:
+        def _count(container) -> int:
+            return max(container.checked_count, container.selected_count)
+
+        if container_id is None:
+            return sum(_count(c) for c in snapshot.state.containers)
+
+        target = next(
+            (c for c in snapshot.state.containers if c.id == container_id),
+            None,
+        )
+
+        if target is None:
+            return None
+
+        if target.total_items <= 1:
+            return sum(
+                _count(c)
+                for c in snapshot.state.containers
+                if c.role == target.role
+                and c.selector_hint == target.selector_hint
+            )
+
+        return _count(target)
+
+    @staticmethod
     def _validate_live_basics(
         *,
         element_id: str,
         live: dict[str, Any],
+        skip_visibility: bool = False,
     ) -> None:
         if not live.get("connected"):
             raise LiveValidationError(f"Element {element_id} is detached from DOM")
 
-        marker = live.get("snapshotMarker")
-        if marker != element_id:
+        if live.get("snapshotMarker") != element_id:
             raise LiveValidationError(
                 f"Element {element_id} snapshot marker mismatch: "
-                f"expected {element_id}, got {marker}"
+                f"expected {element_id}, got {live.get('snapshotMarker')}"
             )
 
-        if not live.get("visible"):
+        if not live.get("visible") and not skip_visibility:
             raise LiveValidationError(f"Element {element_id} is not visible")
 
         if live.get("disabled"):
