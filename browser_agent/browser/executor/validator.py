@@ -141,9 +141,9 @@ class ActionValidator:
         if expected.selected_count is None:
             return
 
-        count = ActionValidator._get_selected_count(
-            snapshot=snapshot,
-            container_id=expected.container_id,
+        count = self._snapshot_mgr.count_selected(
+            snapshot,
+            expected.container_id,
         )
 
         actual["selected_count"] = count
@@ -186,25 +186,6 @@ class ActionValidator:
         found = ActionValidator._find_text(snapshot, expected.text_visible)
         actual["text_found"] = found
         checks.append(("text_visible", found))
-
-    @staticmethod
-    def _get_selected_count(
-        *,
-        snapshot: Snapshot,
-        container_id: str | None,
-    ) -> int | None:
-        containers = snapshot.state.containers
-
-        if container_id:
-            for container in containers:
-                if container.id == container_id:
-                    return max(container.checked_count, container.selected_count)
-            return None
-
-        return sum(
-            max(container.checked_count, container.selected_count)
-            for container in containers
-        )
 
     @staticmethod
     def _find_text(snapshot: Snapshot, text: str) -> bool:

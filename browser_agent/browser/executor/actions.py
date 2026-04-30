@@ -18,7 +18,6 @@ from browser_agent.models import (
     ElementInfo,
     Navigate,
     Scroll,
-    Snapshot,
     Type,
     Wait,
 )
@@ -60,13 +59,13 @@ class ActionExecutor:
 
     async def _execute_click(self, action: Click) -> ActionResult:
         handle: ElementHandle | None = None
-        try:
-            handle = await self._snapshot_mgr.resolve_element(
-                action.element_id,
-                action.snapshot_id,
-            )
 
+        try:
             el_info = self._snapshot_mgr.get_element_data(action.element_id)
+
+            selection_error = self._validate_selection_action(action, el_info)
+            if selection_error:
+                return ActionResult(success=False, message=selection_error)
 
             if self._is_already_in_target_checked_state(action, el_info):
                 target = action.expected.target_checked
@@ -74,22 +73,29 @@ class ActionExecutor:
 
                 return ActionResult(
                     success=True,
-                    message=(
-                        f"Skip click: {action.element_id} already in target state"
-                    ),
+                    message=f"Skip click: {action.element_id} already in target state",
                     observation=f"checked={current}, target={target}",
                     verification_passed=True,
                 )
 
             required_state_error = self._validate_required_state(action)
             if required_state_error:
-                return ActionResult(
-                    success=False,
-                    message=required_state_error,
-                )
+                return ActionResult(success=False, message=required_state_error)
 
-            await handle.scroll_into_view_if_needed(timeout=3000)
-            await handle.click(timeout=self._settings.PAGE_TIMEOUT)
+            is_hidden_selection = self._is_hidden_selection_control(el_info)
+
+            handle = await self._snapshot_mgr.resolve_element(
+                action.element_id,
+                action.snapshot_id,
+                skip_visibility=is_hidden_selection,
+            )
+
+            if is_hidden_selection:
+                await handle.evaluate("(el) => el.click()")
+            else:
+                await handle.scroll_into_view_if_needed(timeout=3000)
+                await handle.click(timeout=self._settings.PAGE_TIMEOUT)
+
             await self._wait_for_stable()
 
             result = ActionResult(
@@ -98,16 +104,15 @@ class ActionExecutor:
             )
 
         except (SnapshotStaleError, ElementNotFoundError, LiveValidationError) as exc:
-            return ActionResult(
-                success=False,
-                message=str(exc),
-            )
+            return ActionResult(success=False, message=str(exc))
+
         except Exception as exc:
             return ActionResult(
                 success=False,
                 message=f"Click failed on {action.element_id}",
                 error=str(exc),
             )
+
         finally:
             if handle is not None:
                 await self._snapshot_mgr.invalidate(cleanup_dom=True)
@@ -256,10 +261,10 @@ class ActionExecutor:
             return "Required state cannot be checked: no current snapshot"
 
         if action.required_state.selected_count is not None:
-            actual = self._count_selected(
+            actual = self._snapshot_mgr.count_selected(
                 snapshot,
                 action.required_state.container_id,
-            )
+            ) or 0
             expected = action.required_state.selected_count
 
             if actual != expected:
@@ -331,18 +336,68 @@ class ActionExecutor:
         )
 
     @staticmethod
-    def _count_selected(snapshot: Snapshot, container_id: str | None) -> int:
-        def count_container(container: Any) -> int:
-            return max(container.checked_count, container.selected_count)
+    def _validate_selection_action(
+        action: Click,
+        element: ElementInfo | None,
+    ) -> str | None:
+        if not action.expected or action.expected.target_checked is None:
+            return None
 
-        if container_id:
-            for container in snapshot.state.containers:
-                if container.id == container_id:
-                    return count_container(container)
-            return 0
+        if element is None:
+            return "target_checked requires element data"
 
-        return sum(
-            count_container(container) for container in snapshot.state.containers
+        if (
+            not ActionExecutor._is_checkable(element)
+            and not element.is_selection_control
+        ):
+            return (
+                "target_checked requires checkbox-like or selection-control element, "
+                f"got tag={element.tag}, role={element.role}, type={element.type}, "
+                f"label={element.label!r}"
+            )
+
+        intent = action.selection_intent
+        if intent is None:
+            return "target_checked requires selection_intent: item, range, or all"
+
+        if intent.mode in {"item", "range"}:
+            if element.selection_scope != "item":
+                return "item/range selection requires selection_scope=item"
+            if not element.container_id:
+                return "item/range selection requires element.container_id"
+            if element.row_index is None:
+                return "item/range selection requires element.row_index"
+
+            if intent.container_id and element.container_id != intent.container_id:
+                return (
+                    "selection_intent.container_id mismatch: "
+                    f"expected {intent.container_id}, got {element.container_id}"
+                )
+
+        if intent.mode == "all":
+            if element.selection_scope != "global":
+                return "all selection requires selection_scope=global"
+
+        return None
+
+    @staticmethod
+    def _is_checkable(element: ElementInfo) -> bool:
+        role = (element.role or "").lower()
+        typ = (element.type or "").lower()
+
+        return (
+            typ == "checkbox"
+            or role in {"checkbox", "menuitemcheckbox", "option"}
+            or element.aria_checked is not None
+            or element.aria_selected is not None
+        )
+
+    @staticmethod
+    def _is_hidden_selection_control(
+        element: ElementInfo | None,
+    ) -> bool:
+        return (
+            element is not None and element.is_selection_control and not element.visible
         )
 
     async def _wait_for_stable(self) -> None:

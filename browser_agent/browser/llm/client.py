@@ -42,7 +42,6 @@ class LLMClient:
             kwargs = {
                 "model": self._model,
                 "messages": messages,
-                "temperature": 0.2,
             }
             if self._supports_json_format:
                 kwargs["response_format"] = {"type": "json_object"}

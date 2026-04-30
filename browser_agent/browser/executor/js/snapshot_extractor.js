@@ -85,6 +85,17 @@
         return null;
     }
 
+    function isCheckboxLike(el) {
+        const role = el.getAttribute('role');
+        const type = el.getAttribute('type');
+        return (
+            type === 'checkbox' ||
+            role === 'checkbox' ||
+            role === 'menuitemcheckbox' ||
+            el.hasAttribute('aria-checked')
+        );
+    }
+
     function getFingerprint(el) {
         const parts = [
             el.tagName,
@@ -160,6 +171,18 @@
         const elementId = 'e' + elementIdx++;
         el.setAttribute(SNAP_ATTR, elementId);
 
+        let isSelectionControl = false;
+        let selectionScope = null;
+        if (isCheckboxLike(el)) {
+            if (containerId !== null && rowIndex !== null) {
+                isSelectionControl = true;
+                selectionScope = 'item';
+            } else if (containerId === null && rowIndex === null) {
+                isSelectionControl = true;
+                selectionScope = 'global';
+            }
+        }
+
         elements.push({
             id: elementId,
             tag: tag,
@@ -183,7 +206,9 @@
             row_index: rowIndex,
             container_id: containerId,
             container_role: containerRole,
-            fingerprint: getFingerprint(el)
+            fingerprint: getFingerprint(el),
+            is_selection_control: isSelectionControl,
+            selection_scope: selectionScope
         });
     }
 
