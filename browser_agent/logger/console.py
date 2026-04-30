@@ -24,21 +24,13 @@ def show_step(step: int, max_steps: int, action: AgentAction, url: str) -> None:
     elif isinstance(action, Done):
         desc = action.summary
     else:
-        desc = getattr(action, "description", "")
+        desc = action.description
 
     console.print(f"\n{label} [yellow]{action_type}[/yellow]: {desc}")
     console.print(f"  [dim]URL: {url}[/dim]")
 
     if isinstance(action, (Click, Type)):
         console.print(f"  [dim]element={action.element_id} snapshot={action.snapshot_id}[/dim]")
-
-
-def show_llm_request(message: str, step: int) -> None:
-    console.print(f"  [dim]-> LLM request: step={step}, {len(message)} chars[/dim]")
-
-
-def show_llm_response(raw: str) -> None:
-    console.print(f"  [dim]<- LLM response: {raw}[/dim]")
 
 
 def show_result(result: ActionResult) -> None:
@@ -64,10 +56,6 @@ def show_done(summary: str, success: bool) -> None:
     title = "Task Completed" if success else "Task Failed"
     console.print()
     console.print(Panel(summary, title=title, border_style=style))
-
-
-def show_error(error: str) -> None:
-    console.print(f"[bold red]Error:[/bold red] {error}")
 
 
 def show_warning(message: str) -> None:
