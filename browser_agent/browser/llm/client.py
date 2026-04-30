@@ -10,7 +10,6 @@ from browser_agent.browser.llm.prompts import (
     format_snapshot,
 )
 from browser_agent.config import LLMSettings
-from browser_agent.logger import console as log
 from browser_agent.models import AgentAction, Done, Snapshot, StepRecord
 
 
@@ -39,8 +38,6 @@ class LLMClient:
             {"role": "user", "content": user_message},
         ]
 
-        log.show_llm_request(user_message, step)
-
         try:
             kwargs = {
                 "model": self._model,
@@ -52,7 +49,6 @@ class LLMClient:
 
             response = await self._client.chat.completions.create(**kwargs)
             raw = response.choices[0].message.content
-            log.show_llm_response(raw)
             data = json.loads(self._extract_json(raw))
 
             return self._action_adapter.validate_python(data)

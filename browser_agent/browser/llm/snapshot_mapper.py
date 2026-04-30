@@ -24,7 +24,7 @@ class SnapshotMapper:
 
     def __init__(
         self,
-        max_elements: int = 120,
+        max_elements: int = 200,
         max_text_blocks: int = 5,
     ) -> None:
         self._max_elements = max_elements
@@ -93,7 +93,10 @@ class SnapshotMapper:
         return "\n".join(lines)
 
     def _format_elements(self, snapshot: Snapshot) -> str:
-        visible_elements = [element for element in snapshot.elements if element.visible]
+        visible_elements = [
+            element for element in snapshot.elements
+            if element.visible or element.is_selection_control
+        ]
         selected_elements = self._select_elements(visible_elements, snapshot)
 
         suffix = (
@@ -125,10 +128,20 @@ class SnapshotMapper:
             if container.checked_count > 0 or container.selected_count > 0
         }
 
-        return sorted(
-            visible_elements,
+        selection_controls = [
+            el for el in visible_elements if el.is_selection_control
+        ]
+        non_controls = [
+            el for el in visible_elements if not el.is_selection_control
+        ]
+
+        remaining = max(0, self._max_elements - len(selection_controls))
+        ranked = sorted(
+            non_controls,
             key=lambda element: self._rank_element(element, containers_with_state),
-        )[: self._max_elements]
+        )[:remaining]
+
+        return selection_controls + ranked
 
     @classmethod
     def _rank_element(
@@ -189,6 +202,11 @@ class SnapshotMapper:
 
         if element.context:
             parts.append(f'ctx="{self._truncate(element.context, 160)}"')
+
+        if element.is_selection_control:
+            parts.append(f"selection={element.selection_scope or 'unknown'}")
+            if not element.visible:
+                parts.append("hover-reveal")
 
         return " ".join(parts)
 
